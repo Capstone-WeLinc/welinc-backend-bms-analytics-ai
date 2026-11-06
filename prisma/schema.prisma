@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                    String               @id @default(uuid()) @db.Uuid
+  name                  String               @db.VarChar(100)
+  username              String               @unique @db.VarChar(50)
+  passwordHash          String               @map("password_hash") @db.VarChar(255)
+  isActive              Boolean              @default(true) @map("is_active")
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  failedLoginAttempts   Int                  @default(0) @map("failed_login_attempts")
+  lockedAt              DateTime?            @map("locked_at") @db.Timestamptz(6)
+  deleted_at            DateTime?            @db.Timestamptz(6)
+  email                 String?              @db.VarChar(255)
+  contact               String?              @db.VarChar(100)
+  profilePicture        String?              @map("profile_picture")
+  deletionRequestStatus String               @default("NONE") @map("deletion_request_status") @db.VarChar(20)
+  roles                 UserRoleAssignment[]
+  activityLogs          UserActivityLog[]
+
+  @@index([deleted_at])
+  @@map("users")
+}
+
+model UserActivityLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  deviceInfo String?  @map("device_info")
+  location   String?  @db.VarChar(255)
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_activity_logs")
+}
+
+model UserRoleAssignment {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  role      UserRole
+  system    SystemType
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, system])
+  @@map("user_roles")
+}
+
+model Booking {
+  id                          String    @id @default(uuid()) @db.Uuid
+  bookingId                   String    @unique @map("booking_id") @db.VarChar(50)
+  client                      String    @db.VarChar(200)
+  service                     String    @db.VarChar(100)
+  date                        String
+  pickupAddress               String?   @map("pickup_address")
+  deliveryAddress             String?   @map("delivery_address")
+  status                      String    @default("For Plotting") @map("status")
+  amount                      Decimal?  @db.Decimal(10, 2)
+  discrepancyNote             String?   @map("discrepancy_note")
+  flagged                     Boolean   @default(false) @map("flagged")
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  time                        String?   @map("time")
+  deleted_at                  DateTime? @db.Timestamptz(6)
+  service_type                String?   @db.VarChar(120)
+  delivery_category           String?   @db.VarChar(40)
+  address                     String?
+  total_amount                String?
+  payment_status              String?   @default("Pending")
+  payment_method              String?
+  full_name                   String?   @db.VarChar(200)
+  contact                     String?
+  email                       String?
+  delivery_location           String?
+  estimated_items             Int?
+  item_details                String?
+  special_instructions        String?
+  notes                       String?
+  services_availed            String[]  @default([])
+  protective_materials        String[]  @default([])
+  additional_services_availed Json?
+  has_insurance               Boolean   @default(false)
+  permit_required             Boolean   @default(false)
+
+  // Post-service review fields
+  postServiceStatus String?   @default("Pending Review") @map("post_service_status") @db.VarChar(40)
+  arrivalStatus     String?   @map("arrival_status") @db.VarChar(40)
+  delayMinutes      Int?      @map("delay_minutes")
+  overtimeHours     Decimal?  @map("overtime_hours") @db.Decimal(4, 2)
+  overtimeCharge    Decimal?  @map("overtime_charge") @db.Decimal(10, 2)
+  amountPaid        Decimal?  @map("amount_paid") @db.Decimal(10, 2)
+  completionNotes   String?   @map("completion_notes")
+  issueReported     Boolean?  @default(false) @map("issue_reported")
+  issueDetails      String?   @map("issue_details")
+  finalizedAt       DateTime? @map("finalized_at") @db.Timestamptz(6)
+  finalizedBy       String?   @map("finalized_by") @db.VarChar(100)
+
+  scheduledBooking ScheduledBooking?
+
+  @@index([deleted_at])
+  @@map("bookings")
+}
+
+// Dispatch data now lives in scheduled_bookings, not columns on bookings.
+model ScheduledBooking {
+  id           String   @id @default(uuid()) @db.Uuid
+  bookingId    String   @unique @map("booking_id") @db.Uuid
+  garage       String?  @db.VarChar(120)
+  deliveryType String?  @map("delivery_type") @db.VarChar(20)
+  vehicleId    String?  @map("vehicle_id") @db.Uuid
+  driverId     String?  @map("driver_id") @db.Uuid
+  helperIds    String[] @default([]) @map("helper_ids")
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("scheduled_bookings")
+}
+
+model Vehicle {
+  id               String        @id @default(uuid()) @db.Uuid
+  plateNumber      String        @unique @map("plate_number") @db.VarChar(20)
+  model            String        @db.VarChar(100)
+  status           VehicleStatus @default(AVAILABLE)
+  odometer         Int           @default(0)
+  isActive         Boolean       @default(true) @map("is_active")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deleted_at       DateTime?     @db.Timestamptz(6)
+  capacity         Int           @default(0)
+  alias            String?       @db.VarChar(120)
+  brand            String?       @db.VarChar(80)
+  type             String?       @db.VarChar(80)
+  year             Int?
+  color            String?       @db.VarChar(40)
+  fuel             String?       @db.VarChar(40)
+  required_helpers Int           @default(1)
+  mileage          Int           @default(0)
+  reg_expiry       DateTime?     @db.Date
+  ins_expiry       DateTime?     @db.Date
+  last_maintenance DateTime?     @db.Date
+  next_maintenance DateTime?     @db.Date
+  driver_id        String?       @db.Uuid
+  garage           String?       @db.VarChar(120)
+
+  @@index([deleted_at])
+  @@map("vehicles")
+}
+
+model Garage {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String    @unique @db.VarChar(50)
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+
+  @@index([deleted_at])
+  @@map("garages")
+}
+
+model Driver {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String    @db.VarChar(100)
+  licenseNumber     String    @unique @map("license_number") @db.VarChar(50)
+  isVerified        Boolean   @default(false) @map("is_verified")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deleted_at        DateTime? @db.Timestamptz(6)
+  emp_id            String?   @unique @db.VarChar(40)
+  initials          String?   @db.VarChar(10)
+  contact           String?   @db.VarChar(80)
+  email             String?   @db.VarChar(160)
+  address           String?
+  license_type      String?   @db.VarChar(80)
+  license_expiry    DateTime? @db.Date
+  crew_status       String?   @db.VarChar(40)
+  total_trips       Int       @default(0)
+  join_date         DateTime? @db.Date
+  emergency_name    String?   @db.VarChar(160)
+  emergency_contact String?   @db.VarChar(80)
+  vehicle_id        String?   @db.Uuid
+
+  @@index([licenseNumber])
+  @@index([deleted_at])
+  @@map("drivers")
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER_SUPPORT
+  OPERATIONS
+}
+
+enum SystemType {
+  BMS
+  SHARED
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  UNDER_REPAIR
+  UNDER_MAINTENANCE
+  IN_TRANSIT
+}
