@@ -2,8 +2,8 @@ import { IsString, IsOptional, IsIn, IsInt, IsArray, IsNotEmpty, Min, Max } from
 
 export class SaveForecastDto {
   @IsString()
-  @IsIn(['7days', '30days', '90days'])
-  forecastHorizon: '7days' | '30days' | '90days';
+  @IsIn(['7days', '30days', '90days', 'nextMonth'])
+  forecastHorizon: '7days' | '30days' | '90days' | 'nextMonth';
 
   @IsString()
   @IsNotEmpty()
@@ -25,10 +25,12 @@ export class SaveForecastDto {
   @Min(0)
   predictedBookings: number;
 
+  /** Only set when backed by an evaluation; never a made-up score. */
   @IsInt()
   @Min(0)
   @Max(100)
-  confidence: number;
+  @IsOptional()
+  confidence?: number | null;
 
   @IsArray()
   forecastData: Array<Record<string, unknown>>;

@@ -17,6 +17,7 @@ interface ForecastRow extends mysql.RowDataPacket {
   service_type: string | null;
   garage: string | null;
   predicted_bookings: number;
+  forecast_data: unknown;
 }
 
 interface ComparisonRecord {
@@ -61,7 +62,7 @@ async function main() {
 
   try {
     const [forecasts] = await mysqlPool.query<ForecastRow[]>(
-      `SELECT id, period_start, period_end, service_type, garage, predicted_bookings
+      `SELECT id, period_start, period_end, service_type, garage, predicted_bookings, forecast_data
        FROM ai_demand_forecasts
        ORDER BY period_start ASC, id ASC`,
     );
@@ -78,20 +79,28 @@ async function main() {
     let mapeCount = 0;
     let zeroActual = 0;
 
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     for (const f of forecasts) {
-      const periodStart = toDateStr(f.period_start);
-      const periodEnd = toDateStr(f.period_end);
+      // period_start/period_end hold the HISTORY the forecast learned from; the
+      // forecast itself covers the dates in forecast_data, so compare against those.
+      let data: unknown = f.forecast_data;
+      if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = []; } }
+      const dates = (Array.isArray(data) ? data : []).map((point: any) => String(point?.date ?? '')).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      if (!dates.length || dates[dates.length - 1] >= today) continue; // no dated forecast, or its period has not finished
+      const periodStart = dates[0];
+      const periodEnd = dates[dates.length - 1];
       const predicted = Number(f.predicted_bookings) || 0;
 
       const where: any = {
         deleted_at: null,
+        NOT: { status: { contains: 'cancel', mode: 'insensitive' } },
         date: {
           gte: periodStart,
           lte: `${periodEnd}T23:59:59.999Z`,
         },
       };
       if (isFilterable(f.service_type)) where.service = f.service_type;
-      if (isFilterable(f.garage)) where.garage = f.garage;
+      if (isFilterable(f.garage)) where.scheduledBooking = { is: { garage: f.garage } };
 
       const actual = await prisma.booking.count({ where });
 

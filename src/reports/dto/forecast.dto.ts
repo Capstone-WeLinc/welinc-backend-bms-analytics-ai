@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsIn, IsISO8601 } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsISO8601, IsBoolean } from 'class-validator';
 
 export class ForecastDto {
   @IsISO8601()
@@ -20,6 +20,11 @@ export class ForecastDto {
   vehicleId?: string;
 
   @IsString()
-  @IsIn(['7days', '30days', '90days'])
-  forecastHorizon: '7days' | '30days' | '90days';
+  @IsIn(['7days', '30days', '90days', 'nextMonth'])
+  forecastHorizon: '7days' | '30days' | '90days' | 'nextMonth';
+
+  /** AI insights only: skip the cached interpretation and ask the model again. */
+  @IsBoolean()
+  @IsOptional()
+  refreshInsights?: boolean;
 }

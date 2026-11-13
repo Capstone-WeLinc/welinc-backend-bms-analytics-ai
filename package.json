@@ -10,6 +10,7 @@
     "start:prod": "node dist/src/main.js",
     "prisma:generate": "prisma generate",
     "typecheck": "tsc --noEmit",
+    "test": "node -r ts-node/register --test test/forecasting.test.ts test/operational-report.test.ts",
     "evaluate:forecast": "ts-node -r tsconfig-paths/register scripts/evaluate-forecast-accuracy.ts"
   },
   "dependencies": {

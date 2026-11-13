@@ -106,7 +106,7 @@ export class MySqlService implements OnModuleInit, OnModuleDestroy {
         service_type VARCHAR(120) NULL,
         garage VARCHAR(120) NULL,
         predicted_bookings INT NOT NULL,
-        confidence DECIMAL(5,2) NOT NULL,
+        confidence DECIMAL(5,2) NULL,
         forecast_data JSON NOT NULL,
         recommendations JSON NULL,
         summary_text TEXT NULL,
@@ -116,6 +116,15 @@ export class MySqlService implements OnModuleInit, OnModuleDestroy {
         KEY ai_demand_forecasts_period_idx (period_start, period_end)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // A confidence score is only stored when an evaluation supports it, so older
+    // tables that required one are relaxed to allow NULL.
+    const [confidence] = await this.pool.query<mysql.RowDataPacket[]>(
+      "SHOW COLUMNS FROM ai_demand_forecasts LIKE 'confidence'",
+    );
+    if (confidence[0]?.Null === 'NO') {
+      await this.pool.query('ALTER TABLE ai_demand_forecasts MODIFY confidence DECIMAL(5,2) NULL');
+    }
   }
 
   private getSafeDatabaseName(value: string): string {
