@@ -1,21 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import * as mysql from 'mysql2/promise';
-import { MySqlService } from '../shared/mysql.service';
+import { ReportStorage } from '../shared/report-storage.service';
 import { SaveReportDto } from './dto/save-report.dto';
 import { SaveForecastDto } from './dto/save-forecast.dto';
 
 /**
- * Saved reports and forecasts (MySQL). The AI Demand Forecasting calculations
+ * Saved reports and forecasts (PostgreSQL). The AI Demand Forecasting calculations
  * live in ./forecasting/demand-forecast.service.ts.
  */
 @Injectable()
 export class ReportsService {
-  constructor(private readonly mysql: MySqlService) {}
+  constructor(private readonly storage: ReportStorage) {}
 
   async saveReport(dto: SaveReportDto) {
     const sql = `INSERT INTO reports (report_type, period_key, garage, kpis, series, raw_metrics)
                  VALUES (?, ?, ?, ?, ?, ?)`;
-    const result = await this.mysql.insert(sql, [
+    const result = await this.storage.insert(sql, [
       dto.reportType,
       dto.periodKey,
       dto.garage ?? null,
@@ -48,7 +47,7 @@ export class ReportsService {
 
     const sql = `INSERT INTO reports (report_type, period_key, garage, kpis, series, raw_metrics)
                  VALUES (?, ?, ?, ?, ?, ?)`;
-    const result = await this.mysql.insert(sql, [
+    const result = await this.storage.insert(sql, [
       'forecast',
       periodKey,
       dto.garage ?? null,
@@ -57,7 +56,7 @@ export class ReportsService {
       JSON.stringify(rawMetrics),
     ]);
 
-    await this.mysql.insert(
+    await this.storage.insert(
       `INSERT INTO ai_demand_forecasts (
         forecast_horizon, period_start, period_end, service_type, garage,
         predicted_bookings, confidence, forecast_data, recommendations, summary_text
@@ -80,7 +79,7 @@ export class ReportsService {
   }
 
   async getSavedReports() {
-    interface ReportRow extends mysql.RowDataPacket {
+    interface ReportRow {
       id: number;
       report_type: string;
       period_key: string;
@@ -91,7 +90,7 @@ export class ReportsService {
       raw_metrics: string | null;
     }
 
-    const rows = await this.mysql.query<ReportRow[]>('SELECT * FROM reports ORDER BY generated_at DESC');
+    const rows = await this.storage.query<ReportRow[]>('SELECT * FROM reports ORDER BY generated_at DESC');
 
     return rows.map((row) => ({
       id: row.id,

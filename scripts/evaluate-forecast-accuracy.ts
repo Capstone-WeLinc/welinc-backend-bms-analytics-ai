@@ -4,13 +4,13 @@ import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
-import * as mysql from 'mysql2/promise';
+
 
 dotenv.config();
 
 const OUTPUT_CSV = path.resolve(__dirname, 'forecast-accuracy-report.csv');
 
-interface ForecastRow extends mysql.RowDataPacket {
+interface ForecastRow {
   id: number;
   period_start: Date | string;
   period_end: Date | string;
@@ -46,22 +46,11 @@ function isFilterable(value: string | null | undefined): value is string {
 }
 
 async function main() {
-  const mysqlPool = mysql.createPool({
-    host: process.env.MYSQL_HOST || 'localhost',
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || 'root',
-    database: process.env.MYSQL_DATABASE || 'welinc',
-    waitForConnections: true,
-    connectionLimit: 10,
-    enableKeepAlive: true,
-  });
-
   const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter: new PrismaPg(pgPool) });
 
   try {
-    const [forecasts] = await mysqlPool.query<ForecastRow[]>(
+    const { rows: forecasts } = await pgPool.query<ForecastRow>(
       `SELECT id, period_start, period_end, service_type, garage, predicted_bookings, forecast_data
        FROM ai_demand_forecasts
        ORDER BY period_start ASC, id ASC`,
@@ -142,7 +131,7 @@ async function main() {
     console.log(`CSV written to: ${OUTPUT_CSV}`);
     console.log('=====================================================\n');
   } finally {
-    await mysqlPool.end();
+
     await prisma.$disconnect();
     await pgPool.end();
   }

@@ -49,9 +49,9 @@ export class OperationalReportService {
 
   private async get<T>(service: 'booking' | 'dispatch' | 'completion', path: string, authorization: string | undefined): Promise<T> {
     const base = {
-      booking: this.config.get<string>('BOOKING_API_URL') || 'http://127.0.0.1:3002',
-      dispatch: this.config.get<string>('DISPATCH_API_URL') || 'http://127.0.0.1:3003',
-      completion: this.config.get<string>('COMPLETION_API_URL') || 'http://127.0.0.1:3004',
+      booking: this.config.get<string>('BOOKING_API_URL') || 'http://127.0.0.1:3021',
+      dispatch: this.config.get<string>('DISPATCH_API_URL') || 'http://127.0.0.1:3022',
+      completion: this.config.get<string>('COMPLETION_API_URL') || 'http://127.0.0.1:3023',
     }[service];
     try {
       const response = await fetch(new URL(path, base), { headers: authorization ? { authorization } : {}, signal: AbortSignal.timeout(10_000) });

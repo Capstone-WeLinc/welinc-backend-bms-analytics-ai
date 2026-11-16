@@ -1,9 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type * as mysql from 'mysql2/promise';
 import Groq from 'groq-sdk';
 import { PrismaService } from '../../shared/prisma.service';
-import { MySqlService } from '../../shared/mysql.service';
+import { ReportStorage } from '../../shared/report-storage.service';
 import type { ForecastDto } from '../dto/forecast.dto';
 import {
   HALF_LIFE_DAYS, SERVICE_TYPES, WEEKDAY_NAMES, addDays, backtest, crewRequirement, dailyCounts, daysBetween, demandLevel, errorMetrics,
@@ -33,16 +32,17 @@ const fmt = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('
 @Injectable()
 export class DemandForecastService {
   private readonly logger = new Logger('DemandForecast');
-  private readonly groq: Groq;
+  private readonly groq: Groq | null;
   private readonly dashboards = new Map<string, { at: number; value: Promise<ForecastDashboard> }>();
   private readonly insights = new Map<string, { at: number; value: Promise<AiInsightsResponse> }>();
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly mysql: MySqlService,
+    private readonly storage: ReportStorage,
   ) {
-    this.groq = new Groq({ apiKey: this.config.get<string>('GROQ_API_KEY') });
+    const apiKey = this.config.get<string>('GROQ_API_KEY');
+    this.groq = apiKey ? new Groq({ apiKey }) : null;
   }
 
   /** One computation serves all four tabs; concurrent and repeated requests share it briefly. */
@@ -74,6 +74,9 @@ export class DemandForecastService {
   }
 
   private async generateInsights(facts: ReturnType<typeof buildFacts>): Promise<AiInsightsResponse> {
+    if (!this.groq) {
+      return { status: 'unavailable', model: null, generatedAt: new Date().toISOString(), insights: null, removedUnverified: 0, message: 'AI interpretation is not configured. Rule-based forecast insights remain available.' };
+    }
     const allowed = allowedNumbers(facts);
     const fallback = this.config.get<string>('GROQ_MODEL');
     const models = [PRIMARY_MODEL, ...(fallback && fallback !== PRIMARY_MODEL ? [fallback] : [])];
@@ -327,7 +330,7 @@ export class DemandForecastService {
   private async loadResources(authorization: string | undefined): Promise<{
     vehicles: VehicleInput[] | null; drivers: CrewInput[] | null; helpers: CrewInput[] | null; assignments: AssignmentInput[] | null; error: string | null;
   }> {
-    const base = this.config.get<string>('DISPATCH_API_URL') || 'http://127.0.0.1:3003';
+    const base = this.config.get<string>('DISPATCH_API_URL') || 'http://127.0.0.1:3022';
     if (!authorization) return { vehicles: null, drivers: null, helpers: null, assignments: null, error: 'Resource availability needs an authenticated request.' };
     const get = async <T>(path: string): Promise<T> => {
       const response = await fetch(new URL(path, base), { headers: { authorization }, signal: AbortSignal.timeout(8000) });
@@ -355,17 +358,17 @@ export class DemandForecastService {
   ): Promise<SavedForecastEvaluation> {
     const none = (reason: string): SavedForecastEvaluation => ({ available: false, reason, evaluatedCount: 0, mae: null, mape: null, records: [] });
     if (context.vehicleFilter || context.garageFilter) return none('Saved forecasts are recorded for all vehicles, so they are not evaluated for a single vehicle.');
-    interface Row extends mysql.RowDataPacket { id: number; forecast_horizon: string; service_type: string | null; predicted_bookings: number; forecast_data: unknown; generated_at: Date | string }
+    interface Row { id: number; forecast_horizon: string; service_type: string | null; predicted_bookings: number; forecast_data: unknown; generated_at: Date | string }
     let rows: Row[];
     try {
-      rows = await this.mysql.query<Row[]>(
+      rows = await this.storage.query<Row[]>(
         `SELECT id, forecast_horizon, service_type, predicted_bookings, forecast_data, generated_at
          FROM ai_demand_forecasts WHERE garage IS NULL AND ${context.serviceFilter ? 'service_type = ?' : 'service_type IS NULL'}
          ORDER BY id DESC LIMIT 1000`,
         context.serviceFilter ? [context.serviceFilter] : [],
       );
     } catch {
-      return none('Saved forecast history (MySQL) is unavailable.');
+      return none('Saved forecast history (PostgreSQL) is unavailable.');
     }
     const latestByTarget = new Map<string, SavedForecastEvaluation['records'][number]>();
     for (const row of rows) {
@@ -396,15 +399,15 @@ export class DemandForecastService {
     const demand = dashboard.demand!;
     const service = dashboard.params.serviceType === 'All' ? null : dashboard.params.serviceType;
     try {
-      interface Existing extends mysql.RowDataPacket { id: number }
-      const existing = await this.mysql.query<Existing[]>(
+      interface Existing { id: number }
+      const existing = await this.storage.query<Existing[]>(
         `SELECT id FROM ai_demand_forecasts WHERE forecast_horizon = ? AND period_start = ? AND period_end = ?
          AND ${service ? 'service_type = ?' : 'service_type IS NULL'} AND garage IS NULL AND predicted_bookings = ?
          AND DATE(generated_at) = CURDATE() LIMIT 1`,
         [dashboard.params.horizon, dashboard.params.historyStart, dashboard.params.historyEnd, ...(service ? [service] : []), demand.totalForecast],
       );
       if (existing.length) return;
-      await this.mysql.insert(
+      await this.storage.insert(
         `INSERT INTO ai_demand_forecasts (forecast_horizon, period_start, period_end, service_type, garage, predicted_bookings, confidence, forecast_data, recommendations, summary_text)
          VALUES (?, ?, ?, ?, NULL, ?, NULL, ?, ?, ?)`,
         [

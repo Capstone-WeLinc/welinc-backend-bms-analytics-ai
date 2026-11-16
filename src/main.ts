@@ -27,6 +27,6 @@ async function bootstrap() {
       ? []
       : ['http://127.0.0.1:5174', 'http://localhost:5174'];
   app.enableCors({ origin: origins });
-  await app.listen(process.env['PORT'] ?? 3001);
+  await app.listen(process.env['PORT'] ?? 3025, '0.0.0.0');
 }
 bootstrap();
