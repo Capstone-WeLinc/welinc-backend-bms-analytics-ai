@@ -1,25 +1,10 @@
 import { Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
-
+import { DatabasePool } from './database-pool';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnApplicationShutdown {
-  private readonly pool: pg.Pool;
-
-  constructor() {
-    const pool = new pg.Pool({
-      connectionString: process.env['DATABASE_URL'],
-    });
-    const adapter = new PrismaPg(pool);
-
-    super({ adapter });
-
-    this.pool = pool;
-  }
-
-  async onApplicationShutdown() {
-    await this.$disconnect();
-    await this.pool.end();
-  }
+ constructor(private readonly database: DatabasePool) { super({adapter:new PrismaPg(database.pool,{disposeExternalPool:false})}); }
+ async checkReady(){await this.database.ready();}
+ async onApplicationShutdown(){await this.$disconnect();}
 }

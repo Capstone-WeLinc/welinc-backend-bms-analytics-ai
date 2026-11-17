@@ -4,7 +4,7 @@
   "private": true,
   "description": "Standalone NestJS backend for WeLinc analytics & AI (reports, Groq demand forecast)",
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/src/main.js",
@@ -13,20 +13,20 @@
     "test": "node -r ts-node/register --test test/forecasting.test.ts test/operational-report.test.ts",
     "evaluate:forecast": "ts-node -r tsconfig-paths/register scripts/evaluate-forecast-accuracy.ts",
     "test:auth": "jest --runInBand",
-    "seed": "node prisma/seed.mjs"
+    "seed": "node prisma/seed.mjs",
+    "lint:ci": "eslint ."
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "groq-sdk": "^1.3.0",
     "pg": "^8.21.0",
-    "prisma": "^7.8.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "jose": "^6.0.0"
@@ -42,7 +42,12 @@
     "typescript": "^5.7.3",
     "jest": "^30.0.0",
     "@types/jest": "^30.0.0",
-    "ts-jest": "^29.4.15"
+    "ts-jest": "^29.4.15",
+    "prisma": "7.10.1",
+    "eslint": "^9.34.0",
+    "@eslint/js": "^9.34.0",
+    "globals": "^16.3.0",
+    "typescript-eslint": "^8.42.0"
   },
   "engines": {
     "node": "24.x"

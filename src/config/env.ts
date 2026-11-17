@@ -1,3 +1,4 @@
+import { hostingIssues } from './hosting';
 export type Env = {
   AUTH_ISSUER: string;
   AUTH_JWKS_URL: string;
@@ -29,7 +30,7 @@ export function validateEnv(
       "PORTAL_URL",
       "AUTH_PUBLIC_URL",
     );
-  const invalid: string[] = [];
+  const invalid: string[] = hostingIssues(raw, true, 'bms-analytics', ['BOOKING_API_URL','DISPATCH_API_URL','COMPLETION_API_URL']);
   for (const key of required)
     if (typeof raw[key] !== "string" || !(raw[key] as string).trim())
       invalid.push(key);

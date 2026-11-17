@@ -1,15 +1,11 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Injectable } from "@nestjs/common";
+import { DatabasePool } from "./database-pool";
 import pg from "pg";
 /** Saved reports use the same BMS-owned analytics PostgreSQL database as its read model. */
 @Injectable()
-export class ReportStorage implements OnModuleDestroy {
+export class ReportStorage {
   private readonly pool: pg.Pool;
-  constructor(config: ConfigService) {
-    this.pool = new pg.Pool({
-      connectionString: config.getOrThrow<string>("DATABASE_URL"),
-    });
-  }
+  constructor(database: DatabasePool) { this.pool = database.pool; }
   private sql(sql: string) {
     let parameter = 0;
     return sql
@@ -29,7 +25,5 @@ export class ReportStorage implements OnModuleDestroy {
     );
     return { insertId: Number(result.rows[0].id) };
   }
-  async onModuleDestroy() {
-    await this.pool.end();
-  }
+
 }

@@ -17,8 +17,7 @@ export class HealthController {
   @Get('ready')
   async ready() {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      await this.storage.query('SELECT 1');
+      await this.prisma.checkReady();
       return { status: 'ok', postgres: 'ok', reports: 'ok' };
     } catch {
       throw new ServiceUnavailableException('Analytics database is unavailable');
