@@ -26,9 +26,10 @@ Read/list routes use GET; forecast and save routes use POST. All require a
 shared BMS access token. `/health/ready` is an internal readiness endpoint.
 Account activity is fetched directly from shared auth by the web app.
 
-Compose supplies auth settings from the backend root environment and the owned
-database URL. This folder's environment file is for optional `GROQ_API_KEY` and
-`GROQ_MODEL`. Keep secret values out of source and logs. Without an AI key,
+Compose reads this folder's own environment: `AUTH_CLIENT_ID=bms-analytics`,
+its own `AUTH_CLIENT_PRIVATE_KEY`, and optional `GROQ_API_KEY`/`GROQ_MODEL`.
+It never inherits the backend's `bms` key. Compose supplies the owned database
+and internal BMS API addresses. Keep secret values out of source and logs. Without an AI key,
 deterministic forecasts remain available and AI interpretation reports that it
 is unconfigured. VMMS must serve its fleet API for live resource planning.
 
@@ -50,3 +51,18 @@ The storage test inserts a uniquely tagged report, verifies PostgreSQL JSON
 storage and parameter binding, and removes its own row in cleanup. The seed
 command preserves existing data. Forecast evaluation remains available as
 `npm run evaluate:forecast` with the owned database configured.
+
+## Hosted builds
+
+`npm run build` generates the Prisma client before compiling Nest. Production
+images use `Dockerfile.prod`; `--target seed` contains migration tools and full
+source. Run `npx prisma migrate deploy` as the owner before starting the app.
+Projection metadata is migration-owned; the projection app login needs no DDL.
+Prisma and saved-report SQL share the single `DB_POOL_MAX` budget (default 2).
+The readiness route gives its database query at most two seconds.
+
+CI runs audit, typecheck, lint, build, auth/hosting tests and report/forecast
+logic tests. The baseline seed is a guarded no-op; the backend root's default
+demo seed populates this database through projection. Production seeds refuse
+unless `SEED_ALLOW=staging` is explicitly supplied to a staging job. See the
+[hosting handoff](../docs/context/bms/hosting-handoff.md).
