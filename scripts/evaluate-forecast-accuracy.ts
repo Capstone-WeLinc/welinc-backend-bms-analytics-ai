@@ -1,3 +1,4 @@
+import { poolMax } from '../src/config/hosting';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -31,22 +32,13 @@ interface ComparisonRecord {
   ape: number | null;
 }
 
-function toDateStr(value: Date | string): string {
-  if (value instanceof Date) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  return String(value).slice(0, 10);
-}
 
 function isFilterable(value: string | null | undefined): value is string {
   return !!value && value.trim() !== '' && value.trim().toLowerCase() !== 'all';
 }
 
 async function main() {
-  const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: poolMax(process.env.DB_POOL_MAX) });
   const prisma = new PrismaClient({ adapter: new PrismaPg(pgPool) });
 
   try {
