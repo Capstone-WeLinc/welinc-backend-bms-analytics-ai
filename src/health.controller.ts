@@ -1,12 +1,12 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './shared/prisma.service';
-import { MySqlService } from './shared/mysql.service';
+import { ReportStorage } from './shared/report-storage.service';
 
 @Controller('health')
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mysql: MySqlService,
+    private readonly storage: ReportStorage,
   ) {}
 
   @Get('live')
@@ -17,9 +17,8 @@ export class HealthController {
   @Get('ready')
   async ready() {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      await this.mysql.query('SELECT 1');
-      return { status: 'ok', postgres: 'ok', mysql: 'ok' };
+      await this.prisma.checkReady();
+      return { status: 'ok', postgres: 'ok', reports: 'ok' };
     } catch {
       throw new ServiceUnavailableException('Analytics database is unavailable');
     }

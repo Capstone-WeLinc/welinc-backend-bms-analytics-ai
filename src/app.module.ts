@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from './config/env';
 import SharedModule from './shared/shared.module';
 import AuthModule from './auth/auth.module';
 import { ReportsModule } from './reports/reports.module';
@@ -8,7 +9,7 @@ import { HealthController } from './health.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     SharedModule,
     AuthModule,
     ReportsModule,

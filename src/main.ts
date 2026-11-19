@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   const accessLog = new Logger('HTTP');
   app.use((request, response, next) => {
@@ -25,8 +26,8 @@ async function bootstrap() {
     ? process.env['CORS_ORIGINS'].split(',').map((origin) => origin.trim()).filter(Boolean)
     : process.env['NODE_ENV'] === 'production'
       ? []
-      : ['http://127.0.0.1:5174', 'http://localhost:5174'];
+      : ['http://localhost:8003'];
   app.enableCors({ origin: origins });
-  await app.listen(process.env['PORT'] ?? 3001);
+  await app.listen(process.env['PORT'] ?? 3025, '0.0.0.0');
 }
 bootstrap();

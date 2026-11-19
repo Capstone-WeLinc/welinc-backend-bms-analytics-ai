@@ -1,22 +1,24 @@
+import { poolMax } from '../src/config/hosting';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
-import * as mysql from 'mysql2/promise';
+
 
 dotenv.config();
 
 const OUTPUT_CSV = path.resolve(__dirname, 'forecast-accuracy-report.csv');
 
-interface ForecastRow extends mysql.RowDataPacket {
+interface ForecastRow {
   id: number;
   period_start: Date | string;
   period_end: Date | string;
   service_type: string | null;
   garage: string | null;
   predicted_bookings: number;
+  forecast_data: unknown;
 }
 
 interface ComparisonRecord {
@@ -30,38 +32,18 @@ interface ComparisonRecord {
   ape: number | null;
 }
 
-function toDateStr(value: Date | string): string {
-  if (value instanceof Date) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  return String(value).slice(0, 10);
-}
 
 function isFilterable(value: string | null | undefined): value is string {
   return !!value && value.trim() !== '' && value.trim().toLowerCase() !== 'all';
 }
 
 async function main() {
-  const mysqlPool = mysql.createPool({
-    host: process.env.MYSQL_HOST || 'localhost',
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || 'root',
-    database: process.env.MYSQL_DATABASE || 'welinc',
-    waitForConnections: true,
-    connectionLimit: 10,
-    enableKeepAlive: true,
-  });
-
-  const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pgPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: poolMax(process.env.DB_POOL_MAX) });
   const prisma = new PrismaClient({ adapter: new PrismaPg(pgPool) });
 
   try {
-    const [forecasts] = await mysqlPool.query<ForecastRow[]>(
-      `SELECT id, period_start, period_end, service_type, garage, predicted_bookings
+    const { rows: forecasts } = await pgPool.query<ForecastRow>(
+      `SELECT id, period_start, period_end, service_type, garage, predicted_bookings, forecast_data
        FROM ai_demand_forecasts
        ORDER BY period_start ASC, id ASC`,
     );
@@ -78,20 +60,28 @@ async function main() {
     let mapeCount = 0;
     let zeroActual = 0;
 
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     for (const f of forecasts) {
-      const periodStart = toDateStr(f.period_start);
-      const periodEnd = toDateStr(f.period_end);
+      // period_start/period_end hold the HISTORY the forecast learned from; the
+      // forecast itself covers the dates in forecast_data, so compare against those.
+      let data: unknown = f.forecast_data;
+      if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = []; } }
+      const dates = (Array.isArray(data) ? data : []).map((point: any) => String(point?.date ?? '')).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      if (!dates.length || dates[dates.length - 1] >= today) continue; // no dated forecast, or its period has not finished
+      const periodStart = dates[0];
+      const periodEnd = dates[dates.length - 1];
       const predicted = Number(f.predicted_bookings) || 0;
 
       const where: any = {
         deleted_at: null,
+        NOT: { status: { contains: 'cancel', mode: 'insensitive' } },
         date: {
           gte: periodStart,
           lte: `${periodEnd}T23:59:59.999Z`,
         },
       };
       if (isFilterable(f.service_type)) where.service = f.service_type;
-      if (isFilterable(f.garage)) where.garage = f.garage;
+      if (isFilterable(f.garage)) where.scheduledBooking = { is: { garage: f.garage } };
 
       const actual = await prisma.booking.count({ where });
 
@@ -133,7 +123,7 @@ async function main() {
     console.log(`CSV written to: ${OUTPUT_CSV}`);
     console.log('=====================================================\n');
   } finally {
-    await mysqlPool.end();
+
     await prisma.$disconnect();
     await pgPool.end();
   }

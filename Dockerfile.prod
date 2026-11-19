@@ -1,0 +1,27 @@
+FROM node:24-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY . .
+RUN npm run build
+
+FROM builder AS seed
+ENV NODE_ENV=production
+# Jobs read source and migrations; avoid duplicating node_modules in a chown layer.
+RUN chown node:node /app
+USER node
+CMD ["node", "--version"]
+
+FROM builder AS prod-deps
+RUN npm prune --offline --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+
+FROM node:24-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3025
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/dist ./dist
+USER node
+EXPOSE 3025
+CMD ["node", "dist/src/main.js"]
