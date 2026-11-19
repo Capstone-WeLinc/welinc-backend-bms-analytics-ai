@@ -44,7 +44,7 @@
     "@types/jest": "^30.0.0",
     "ts-jest": "^29.4.15",
     "prisma": "7.10.1",
-    "eslint": "^9.34.0",
+    "eslint": "^10.15.0",
     "@eslint/js": "^9.34.0",
     "globals": "^16.3.0",
     "typescript-eslint": "^8.42.0"
