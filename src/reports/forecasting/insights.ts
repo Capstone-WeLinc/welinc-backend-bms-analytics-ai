@@ -19,6 +19,12 @@ export interface InsightSet { summary: string; keyInsights: InsightItem[]; recom
 const fmtDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const fmtRange = (start: string, end: string) => (start === end ? fmtDate(start) : `${fmtDate(start)}–${fmtDate(end)}`);
 const one = (value: number) => (Math.round(value * 10) / 10).toString();
+/**
+ * Dates as the AI should write them (spec bms/0024): "Mon, Nov 30", or "Nov 30, 2025" where the year
+ * matters. Handing the AI ISO dates ("2026-11-30") made it copy them into its text.
+ */
+const factDay = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const factDate = (date: string | null) => (date ? new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : null);
 
 export function buildSystemInsights(d: ForecastDashboard): InsightSet {
   const empty: InsightSet = { summary: '', keyInsights: [], recommendedActions: [], risks: [] };
@@ -115,8 +121,8 @@ export function buildSystemInsights(d: ForecastDashboard): InsightSet {
 export function buildFacts(d: ForecastDashboard) {
   const demand = d.demand!;
   return {
-    forecastPeriod: { start: d.params.forecastStart, end: d.params.forecastEnd, days: d.params.forecastDays },
-    historyUsed: { start: d.dataQuality.trainingStart, end: d.params.historyEnd, days: d.dataQuality.trainingDays, bookings: d.dataQuality.trainingBookings },
+    forecastPeriod: { start: factDate(d.params.forecastStart), end: factDate(d.params.forecastEnd), days: d.params.forecastDays },
+    historyUsed: { start: factDate(d.dataQuality.trainingStart), end: factDate(d.params.historyEnd), days: d.dataQuality.trainingDays, bookings: d.dataQuality.trainingBookings },
     forecastMethod: d.method.label,
     demand: {
       totalForecastBookings: demand.totalForecast,
@@ -125,8 +131,8 @@ export function buildFacts(d: ForecastDashboard) {
       previousPeriodActualBookings: demand.previousPeriod.actual,
       changeVsPreviousPeriodPct: demand.previousPeriod.changePct === null ? null : Math.round(demand.previousPeriod.changePct * 10) / 10,
       demandLevel: demand.demandLevel?.level ?? null,
-      peakWeek: demand.peakWeek ? { start: demand.peakWeek.start, end: demand.peakWeek.end, bookings: Math.round(demand.peakWeek.bookings * 10) / 10, sharePct: Math.round(demand.peakWeek.sharePct * 10) / 10 } : null,
-      peakDay: demand.peakDay ? { date: demand.peakDay.date, bookings: Math.round(demand.peakDay.bookings * 10) / 10 } : null,
+      peakWeek: demand.peakWeek ? { start: factDay(demand.peakWeek.start), end: factDay(demand.peakWeek.end), bookings: Math.round(demand.peakWeek.bookings * 10) / 10, sharePct: Math.round(demand.peakWeek.sharePct * 10) / 10 } : null,
+      peakDay: demand.peakDay ? { date: factDay(demand.peakDay.date), bookings: Math.round(demand.peakDay.bookings * 10) / 10 } : null,
       busiestWeekday: demand.peakPattern ? { weekday: demand.peakPattern.weekday, bookingsEach: demand.peakPattern.bookings, dates: demand.peakPattern.dates.map(fmtDate) } : null,
       previousPeriodDays: demand.previousPeriod.days,
       previousPeriodDailyAverage: demand.previousPeriod.dailyAverage,
@@ -134,13 +140,13 @@ export function buildFacts(d: ForecastDashboard) {
     services: d.services.rows.map((row) => ({ service: row.service, forecastBookings: Math.round(row.forecast * 10) / 10, sharePct: Math.round(row.forecastSharePct * 10) / 10, previousPeriodBookings: row.previousActual, trend: row.trend })),
     bookingsWithoutServiceTypeSharePct: Math.round(d.services.unclassified.sharePct * 10) / 10,
     resources: d.resources.status === 'ok' ? d.resources.resources.map((item) => ({
-      resource: item.label, neededOnBusiestDay: item.peakRequired, busiestDay: item.peakDate,
+      resource: item.label, neededOnBusiestDay: item.peakRequired, busiestDay: factDay(item.peakDate),
       // Without availability data, say so instead of implying zero shortage.
       ...(d.resources.availabilityError
         ? { availability: 'unknown' }
         : { usableThatDay: item.usableOnPeak, shortage: item.shortage, daysWithShortage: item.shortageDays, unavailableNow: item.unavailableNow }),
     })) : { status: d.resources.status, note: d.resources.message },
-    vehiclesOutOfService: d.resources.availabilityError ? 'unknown' : d.resources.unavailableVehicles.map((v) => ({ plateNumber: v.plateNumber, status: v.status, expectedBack: v.expectedBack })),
+    vehiclesOutOfService: d.resources.availabilityError ? 'unknown' : d.resources.unavailableVehicles.map((v) => ({ plateNumber: v.plateNumber, status: v.status, expectedBack: v.expectedBack ? factDay(v.expectedBack) : null })),
     forecastEvaluation: d.evaluation.backtest.available
       ? { testDays: d.evaluation.backtest.testDays, maeBookingsPerDay: Math.round((d.evaluation.backtest.mae ?? 0) * 100) / 100, mapePct: d.evaluation.backtest.mape === null ? null : Math.round(d.evaluation.backtest.mape * 10) / 10 }
       : { available: false, reason: d.evaluation.backtest.reason },
@@ -204,7 +210,10 @@ Rules:
 - Use ONLY numbers, dates and names that appear in the JSON. Never estimate, compute, round differently, or invent any figure, resource quantity, percentage or accuracy score.
 - If something is missing or null, say it is unavailable instead of guessing.
 - Recommendations are suggestions; do not claim anything has been scheduled or assigned.
-- Write short, plain sentences. Dates may be written like "Dec 15".
+- Write short, plain sentences. Write dates exactly as the JSON gives them (like "Mon, Nov 30" or "Nov 30"); never write a date as numbers such as 2026-11-30 or 11/30.
+- A service's trend "new" means it had no bookings in the previous period, not that the service is new; say "no recent bookings", never "new service".
+- Only suggest promoting or monitoring a service whose trend is "down" or "new". Never suggest promoting the most demanded service.
+- Every risk must be supported by the data. Its title must name the actual risk; if the data shows enough trucks, drivers or helpers, do not title a risk a "shortage". Leave a risk out rather than describe one the data does not show.
 - The summary is 3-5 sentences, one idea per sentence, each under 20 words, in this order: total and daily average, demand level and change vs. the previous period, peak day and busiest weekday, trucks and crew. Do not list every date; name the busiest weekday instead.
 Respond with JSON only, in this shape:
 {"summary": string,
