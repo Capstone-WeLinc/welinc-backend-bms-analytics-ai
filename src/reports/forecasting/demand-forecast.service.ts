@@ -152,8 +152,12 @@ export class DemandForecastService {
     bookings.filter((b) => b.day >= window.start && b.day <= window.end).forEach((b) => bookedInWindow.set(b.day, (bookedInWindow.get(b.day) ?? 0) + 1));
     const alreadyBooked = [...bookedInWindow.values()].reduce((sum, n) => sum + n, 0);
     // Bookings already on the calendar are known demand: a day is never forecast below them.
+    // Each day is rounded to 0.1 here, once, so the total, weekly and monthly figures, the peak and the
+    // services split are all built from the values the screen shows and always add up (spec bms/0024).
+    // Rounding the days only at the end made a 90-day total of 116 next to daily bars summing to 117,
+    // because the same weekday rate rounds the same way every week.
     const daily = model.method === 'none' ? [] : predict(model, window.start, window.end).map((day) => ({
-      date: day.date, forecast: Math.max(day.forecast, bookedInWindow.get(day.date) ?? 0), alreadyBooked: bookedInWindow.get(day.date) ?? 0,
+      date: day.date, forecast: round1(Math.max(day.forecast, bookedInWindow.get(day.date) ?? 0)), alreadyBooked: bookedInWindow.get(day.date) ?? 0,
     }));
     const forecastTotalRaw = daily.reduce((sum, day) => sum + day.forecast, 0);
 
